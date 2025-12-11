@@ -11,7 +11,7 @@ let humidityData = [];
 let temperatureData = [];
 
 // Inicializar gráficas
-function initCharts() {
+function initCharts() { 
     // Gráfico de Humedad
     try {
         const humidityCanvas = document.getElementById('humidityChart');
@@ -170,7 +170,8 @@ function initCharts() {
 // Cargar datos del servidor
 async function cargarDatos() {
     try {
-        console.log('Iniciando carga de datos desde:', `${API_URL}/riego`);
+        console.log('Cargando datos desde:', `${API_URL}/riego`);
+        
         const response = await fetch(`${API_URL}/riego`);
         
         console.log('Respuesta del servidor:', response.status, response.statusText);
@@ -180,15 +181,21 @@ async function cargarDatos() {
         }
         
         const result = await response.json();
-        console.log('Datos recibidos:', result);
         
-        if (result.success && result.datos) {
+        if (result.success && result.datos && Object.keys(result.datos).length > 0) {
             allData = Object.entries(result.datos).map(([id, data]) => {
-                // Convertir timestamp a milisegundos si está en segundos
                 let timestamp = data.timestamp;
-                if (timestamp < 10000000000) { // Si es menor a este valor, probablemente esté en segundos
+                
+                // Si el timestamp es muy pequeño (menor a 1 año en ms), 
+                // probablemente sea tiempo desde el encendido del dispositivo
+                // En ese caso, usar la hora actual
+                if (timestamp < 31536000000) { // Menor a 1 año en milisegundos
+                    timestamp = Date.now();
+                } else if (timestamp < 10000000000) { 
+                    // Si está en segundos pero es un timestamp válido, convertir a milisegundos
                     timestamp = timestamp * 1000;
                 }
+                
                 return {
                     id,
                     ...data,
@@ -196,7 +203,8 @@ async function cargarDatos() {
                 };
             }).sort((a, b) => a.timestamp - b.timestamp);
             
-            console.log('Datos procesados:', allData.length, 'registros');
+            console.log('Datos cargados:', allData.length, 'registros');
+            console.log('Datos cargados:', allData.length, 'registros');
             procesarDatos();
             actualizarGraficos();
             actualizarTabla();
@@ -223,10 +231,11 @@ function procesarDatos() {
     
     // Estado (basado en si hay riego activo)
     const tiempoRiego = ultimoDato.tiempo_riego_pid || ultimoDato.duration || 0;
-    const estado = tiempoRiego > 0 ? 'Activo' : 'Inactivo';
+    const estado = tiempoRiego > 0 ? 'Riego Activo' : 'Sistema Inactivo';
     const badgeClass = tiempoRiego > 0 ? 'badge-active' : 'badge-inactive';
+    const iconClass = tiempoRiego > 0 ? 'fa-play-circle' : 'fa-stop-circle';
     const statusEl = document.getElementById('statusValue');
-    if (statusEl) statusEl.innerHTML = `<span class="badge ${badgeClass}">${estado}</span>`;
+    if (statusEl) statusEl.innerHTML = `<span class="badge ${badgeClass}"><i class="fas ${iconClass}"></i>${estado}</span>`;
     const statusTimeEl = document.getElementById('statusTime');
     if (statusTimeEl) statusTimeEl.textContent = `Última actualización: ${formatearFecha(ultimoDato.timestamp)}`;
     
@@ -297,32 +306,55 @@ function actualizarGraficos() {
     if (temperatureWrapper) temperatureWrapper.style.display = 'block';
 }
 
-// Actualizar tabla
+// Actualizar tabla (solo mostrar registros ACTIVOS - encendidos)
 function actualizarTabla() {
     const tbody = document.getElementById('tableBody');
+    const noDataMessage = document.getElementById('noDataMessage');
+    const historialTable = document.getElementById('historialTable');
+    
     if (!tbody) return;
     tbody.innerHTML = '';
 
-    const ultimosPuntos = allData.slice(-30).reverse();
-
-    ultimosPuntos.forEach(dato => {
-        const fila = document.createElement('tr');
+    // Filtrar solo los registros donde el sistema estuvo ACTIVO (tiempo_riego > 0)
+    const registrosActivos = allData.filter(dato => {
         const tiempoRiego = dato.tiempo_riego_pid || dato.duration || 0;
-        const estado = tiempoRiego > 0 ? 'Activo' : 'Inactivo';
-        const badgeClass = tiempoRiego > 0 ? 'badge-active' : 'badge-inactive';
+        return tiempoRiego > 0;
+    }).reverse(); // Mostrar los más recientes primero
 
-        const humedad = dato.humedad_pct !== undefined ? dato.humedad_pct : (dato.humidity || 0);
-        const temperatura = dato.temp_c !== undefined ? dato.temp_c : (dato.temperature || 0);
+    // Limitar a los últimos 20 registros activos
+    const ultimosActivos = registrosActivos.slice(0, 20);
 
-        fila.innerHTML = `
-            <td>${formatearFecha(dato.timestamp)}</td>
-            <td>${typeof humedad === 'number' ? humedad.toFixed(1) : humedad}%</td>
-            <td>${typeof temperatura === 'number' ? temperatura.toFixed(1) : temperatura}°C</td>
-            <td><span class="badge ${badgeClass}">${estado}</span></td>
-            <td>${((tiempoRiego || 0) / 60).toFixed(1)}</td>
-        `;
-        tbody.appendChild(fila);
-    });
+    if (ultimosActivos.length === 0) {
+        // No hay registros activos
+        if (noDataMessage) noDataMessage.style.display = 'block';
+        if (historialTable) historialTable.style.display = 'none';
+    } else {
+        // Hay registros activos
+        if (noDataMessage) noDataMessage.style.display = 'none';
+        if (historialTable) historialTable.style.display = 'table';
+
+        ultimosActivos.forEach(dato => {
+            const fila = document.createElement('tr');
+            const tiempoRiego = dato.tiempo_riego_pid || dato.duration || 0;
+            const humedad = dato.humedad_pct !== undefined ? dato.humedad_pct : (dato.humidity || 0);
+            const temperatura = dato.temp_c !== undefined ? dato.temp_c : (dato.temperature || 0);
+            const distancia = dato.distancia_cm || 'N/A';
+            
+            // Convertir segundos a minutos y segundos para mejor legibilidad
+            const minutos = Math.floor(tiempoRiego / 60);
+            const segundos = Math.round(tiempoRiego % 60);
+            const duracionFormateada = minutos > 0 ? `${minutos}m ${segundos}s` : `${segundos}s`;
+
+            fila.innerHTML = `
+                <td class="fecha-col">${formatearFecha(dato.timestamp)}</td>
+                <td>${typeof humedad === 'number' ? humedad.toFixed(1) : humedad}%</td>
+                <td>${typeof temperatura === 'number' ? temperatura.toFixed(1) : temperatura}°C</td>
+                <td class="duracion-col">${duracionFormateada}</td>
+                <td>${typeof distancia === 'number' ? distancia.toFixed(1) : distancia} cm</td>
+            `;
+            tbody.appendChild(fila);
+        });
+    }
 
     const tableLoading = document.getElementById('tableLoading');
     const tableContent = document.getElementById('tableContent');
@@ -332,6 +364,10 @@ function actualizarTabla() {
 
 // Formatear fecha
 function formatearFecha(timestamp) {
+    // Si el timestamp está en segundos (menor a 10000000000), convertir a milisegundos
+    if (timestamp < 10000000000) {
+        timestamp = timestamp * 1000;
+    }
     const fecha = new Date(timestamp);
     return fecha.toLocaleString('es-ES', {
         year: 'numeric',
@@ -345,6 +381,10 @@ function formatearFecha(timestamp) {
 
 // Formatear tiempo transcurrido
 function formatearTiempoTranscurrido(timestamp) {
+    // Si el timestamp está en segundos (menor a 10000000000), convertir a milisegundos
+    if (timestamp < 10000000000) {
+        timestamp = timestamp * 1000;
+    }
     const ahora = Date.now();
     const diferencia = ahora - timestamp;
     const minutos = Math.floor(diferencia / 60000);
@@ -421,12 +461,12 @@ function exportarDatos() {
     mostrarExito('Datos exportados correctamente');
 }
 
-// Limpiar datos (confirmación)
-function limpiarDatos() {
-    if (confirm('¿Estás seguro de que deseas eliminar todos los datos de riego? Esta acción no se puede deshacer.')) {
-        // Aquí puedes agregar la lógica para limpiar datos
-        mostrarError('Función de limpieza no está implementada en el servidor');
-    }
+// Forzar recarga completa de datos
+function recargarTodo() {
+    console.log('Recargando datos...');
+    allData = [];
+    cargarDatos();
+    mostrarExito('Datos recargados completamente');
 }
 
 // Configurar auto-actualización
@@ -441,6 +481,39 @@ function detenerAutoActualizacion() {
         clearInterval(updateTimer);
     }
 }
+
+// Abrir modal del historial
+function abrirModal() {
+    const modal = document.getElementById('historialModal');
+    if (modal) {
+        modal.classList.add('show');
+        document.body.style.overflow = 'hidden'; // Prevenir scroll del body
+    }
+}
+
+// Cerrar modal
+function cerrarModal() {
+    const modal = document.getElementById('historialModal');
+    if (modal) {
+        modal.classList.remove('show');
+        document.body.style.overflow = ''; // Restaurar scroll
+    }
+}
+
+// Cerrar modal si se hace clic fuera del contenido
+function cerrarModalSiFueraClick(event) {
+    const modal = document.getElementById('historialModal');
+    if (event.target === modal) {
+        cerrarModal();
+    }
+}
+
+// Cerrar modal con la tecla Escape
+document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+        cerrarModal();
+    }
+});
 
 // Inicialización cuando carga la página
 document.addEventListener('DOMContentLoaded', () => {
