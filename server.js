@@ -29,6 +29,7 @@ const db = admin.database();
 // Referencias a Firebase
 const refHistorial = db.ref('sensores_historial'); // Historial de todas las lecturas
 const refTiempoReal = db.ref('sensores_tiempo_real'); // Solo el dato más actual
+const refRiego = db.ref('riego'); // Datos de riego
 
 // --- CONFIGURACIÓN DE PUERTO SERIAL ---
 // Configurar el puerto serial del Arduino
@@ -161,8 +162,19 @@ app.get('/', (req, res) => {
     endpoints: {
       POST: '/api/datos - Guardar datos en Firebase',
       GET: '/api/datos - Obtener todos los datos',
-      GET: '/api/datos/:id - Obtener datos por ID'
+      GET: '/api/datos/:id - Obtener datos por ID',
+      GET: '/api/riego - Obtener todos los datos de riego',
+      GET: '/api/riego/tiempo-real - Obtener último dato de riego'
     }
+  });
+});
+
+// Ruta de prueba para verificar que el servidor responde
+app.get('/api/test', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Servidor funcionando correctamente',
+    timestamp: Date.now()
   });
 });
 
@@ -307,6 +319,49 @@ app.delete('/api/datos/:id', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error al eliminar dato',
+      error: error.message
+    });
+  }
+});
+
+// Ruta para obtener todos los datos de riego
+app.get('/api/riego', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 100;
+    const snapshot = await refRiego.limitToLast(limit).once('value');
+    const datos = snapshot.val();
+    
+    res.json({
+      success: true,
+      datos: datos || {},
+      total: datos ? Object.keys(datos).length : 0
+    });
+  } catch (error) {
+    console.error('Error al obtener datos de riego:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al obtener datos de riego',
+      error: error.message
+    });
+  }
+});
+
+// Ruta para obtener el estado en tiempo real de riego
+app.get('/api/riego/tiempo-real', async (req, res) => {
+  try {
+    const snapshot = await refRiego.limitToLast(1).once('value');
+    const datos = snapshot.val();
+    const ultimoDato = datos ? Object.values(datos)[0] : null;
+    
+    res.json({
+      success: true,
+      datos: ultimoDato || {}
+    });
+  } catch (error) {
+    console.error('Error al obtener datos en tiempo real de riego:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al obtener datos',
       error: error.message
     });
   }

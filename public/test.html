@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test API</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 10px 0;
+            font-size: 14px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        pre {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 15px;
+            overflow-x: auto;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .error {
+            color: red;
+        }
+        .success {
+            color: green;
+        }
+        .info {
+            color: blue;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Test API - Monitor de Riego</h1>
+        <p>Esta página te ayuda a diagnosticar problemas con las conexiones</p>
+    </div>
+
+    <div class="container">
+        <h2>1. Prueba conexión básica</h2>
+        <button onclick="testBasic()">Test /api/test</button>
+        <pre id="basicResult"></pre>
+    </div>
+
+    <div class="container">
+        <h2>2. Obtener datos de riego</h2>
+        <button onclick="testRiego()">Get /api/riego</button>
+        <button onclick="testRiegoLimit()">Get /api/riego?limit=5</button>
+        <pre id="riegoResult"></pre>
+    </div>
+
+    <div class="container">
+        <h2>3. Obtener último dato en tiempo real</h2>
+        <button onclick="testRiegoRT()">Get /api/riego/tiempo-real</button>
+        <pre id="riegoRTResult"></pre>
+    </div>
+
+    <div class="container">
+        <h2>4. Estado del servidor</h2>
+        <button onclick="testStatus()">Get / (Status)</button>
+        <pre id="statusResult"></pre>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:3000';
+
+        function displayResult(elementId, data, error = false) {
+            const element = document.getElementById(elementId);
+            if (error) {
+                element.innerHTML = `<span class="error">❌ Error: ${data}</span>`;
+            } else {
+                element.innerHTML = `<span class="success">✅ Éxito</span>\n${JSON.stringify(data, null, 2)}`;
+            }
+        }
+
+        async function testBasic() {
+            try {
+                const response = await fetch(`${API_URL}/api/test`);
+                const data = await response.json();
+                displayResult('basicResult', data);
+            } catch (error) {
+                displayResult('basicResult', error.message, true);
+            }
+        }
+
+        async function testRiego() {
+            try {
+                const response = await fetch(`${API_URL}/api/riego`);
+                const data = await response.json();
+                displayResult('riegoResult', data);
+            } catch (error) {
+                displayResult('riegoResult', error.message, true);
+            }
+        }
+
+        async function testRiegoLimit() {
+            try {
+                const response = await fetch(`${API_URL}/api/riego?limit=5`);
+                const data = await response.json();
+                displayResult('riegoResult', data);
+            } catch (error) {
+                displayResult('riegoResult', error.message, true);
+            }
+        }
+
+        async function testRiegoRT() {
+            try {
+                const response = await fetch(`${API_URL}/api/riego/tiempo-real`);
+                const data = await response.json();
+                displayResult('riegoRTResult', data);
+            } catch (error) {
+                displayResult('riegoRTResult', error.message, true);
+            }
+        }
+
+        async function testStatus() {
+            try {
+                const response = await fetch(`${API_URL}/`);
+                const data = await response.json();
+                displayResult('statusResult', data);
+            } catch (error) {
+                displayResult('statusResult', error.message, true);
+            }
+        }
+
+        // Auto-test al cargar
+        window.addEventListener('load', () => {
+            console.log('Testing API endpoints...');
+            setTimeout(() => {
+                testBasic();
+                testStatus();
+            }, 500);
+        });
+    </script>
+</body>
+</html>
